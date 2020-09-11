@@ -39,3 +39,11 @@ def test_with_invalid_search_method():
     """Return column with a specific filter."""
     with pytest.raises(ValueError):
         ColumnDT(User.name, search_method='invalid')
+
+#Added by kartikeyas00        
+def test_with_yadcf_data_param():
+    """Return Column with yadcf_data filter as false."""
+    col = ColumnDT(User.name, yadcf_data=False)
+
+    if col.yadcf_data != False:
+        raise AssertionError()

@@ -134,7 +134,6 @@ def test_date_lt(session):
         column=User.birthday,
         search_method='date',
         search_value='<1970-01-03')
-    print(res)
     assert res['recordsFiltered'] == '1'
 
 
@@ -144,7 +143,6 @@ def test_yadcf_range_date(session):
         column=User.birthday,
         search_method='yadcf_range_date',
         search_value='1970-01-03-yadcf_delim-1970-01-13')
-    print(res)
     assert res['recordsFiltered'] == '1'
 
 

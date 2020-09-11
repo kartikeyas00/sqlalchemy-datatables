@@ -3,11 +3,19 @@ from sqlalchemy import func
 
 from datatables import ColumnDT, DataTables
 
-from .helpers import create_dt_params
+from .helpers import create_dt_params, create_dt_params_with_mData, create_dt_params_with_mData_shuffled, create_dt_params_with_mData_with_extra_data
 from .models import Address, User
 
-
-def test_fields_mdata(session):
+@pytest.mark.parametrize(
+    ('create_dt_params_function'),
+    (
+     (create_dt_params),
+     (create_dt_params_with_mData),
+     (create_dt_params_with_mData_shuffled),
+     (create_dt_params_with_mData_with_extra_data)
+     )
+)
+def test_fields_mdata(session, create_dt_params_function):
     """Test if the result's data have mData set."""
     columns = [
         ColumnDT(User.id, mData='ID'),
@@ -18,10 +26,9 @@ def test_fields_mdata(session):
 
     query = session.query().select_from(User).join(Address)
 
-    params = create_dt_params(columns)
+    params = create_dt_params_function(columns)
     rowTable = DataTables(params, query, columns)
     res = rowTable.output_result()
-
     assert len(res['data']) == 3
     assert 'ID' in res['data'][0]
     assert 'Username' in res['data'][0]
