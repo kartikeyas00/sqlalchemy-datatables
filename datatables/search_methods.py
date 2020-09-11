@@ -37,7 +37,6 @@ def numeric_query(expr, value):
         num_value = 0
     else:
         num_value = float(value)
-
     return operator_func(expr, num_value)
 
 
@@ -69,8 +68,18 @@ def yadcf_range_date(expr, value):
 
 def yadcf_multi_select(expr, value):
     options = value.split('|')
+    # Sometimes the yadcf_multi_select options contains null. Reasons could be
+    # a null value in the backend or explicitly set by the user in the frontend. 
+    #Added the below line so that null could be converted to None as null is not
+    #recognized in python.
+    options = [None if i.strip()=='null' else i for i in options]
     logger.debug('yadcf_multi_select: in %s', options)
-    return expr.cast(Text).in_(options)
+    #Modified so when someone searches null it would be taken care of.
+    if None in options:
+        operator_func = search_operators['=']
+        return ((expr.cast(Text).in_(options)) | operator_func(expr.cast(Text),None))
+    else:
+        return expr.cast(Text).in_(options)
 
 
 SEARCH_METHODS = {

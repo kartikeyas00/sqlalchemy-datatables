@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import math
+import re
 
 from sqlalchemy import Text, func, or_
 from sqlalchemy.dialects import mysql, postgresql, sqlite
@@ -62,6 +63,33 @@ class DataTables:
         for k, v in self.yadcf_params:
             output[k] = v
         return output
+    
+    def _map_columns_with_params(self, columns, params):
+        """Compare columns data with the parameters data and map the correct
+            column number to the columns data. As a lot of times in  frontend columns 
+            are not in the correct order as they are in the backend. Also there
+            are cases when extra dummy columns are added in the frontend and they
+            disturb the sequencing, thus the results coming from the backend."""
+        pattern = re.compile("columns\[(.*?)\]\[data\]")
+        # Extract only the keys of type columns[i][data] from the params
+        params_column_data = {k: v for k, v in params.items() if pattern.match(k)}
+        column_params_map = []
+        i = 0
+        for key, value in params_column_data.items():
+            column_number = int(pattern.search(key).group(1))
+            if str(value):
+                for column in columns:
+                    # If the mData is specified as well as the data is specified
+                    # in the frontend then we would try to map the correct column number
+                    # You can set the data in the datatables here https://datatables.net/reference/option/columns.data
+                    if str(value) == column.mData:
+                        column_params_map.append((column_number, column))
+                        break
+                else:
+                    # If we are unable to find the matching data
+                    column_params_map.append((column_number, columns[i]))
+                i += 1
+        return column_params_map                
 
     def _query_with_all_filters_except_one(self, query, exclude):
         return query.filter(*[
@@ -71,20 +99,26 @@ class DataTables:
 
     def _set_yadcf_data(self, query):
         # determine values for yadcf filters
-        for i, col in enumerate(self.columns):
-            if col.search_method in 'yadcf_range_number_slider':
-                v = query.add_columns(
-                    func.min(col.sqla_expr), func.max(col.sqla_expr)).one()
-                self.yadcf_params.append(('yadcf_data_{:d}'.format(i),
-                                          (math.floor(v[0]), math.ceil(v[1]))))
-            if col.search_method in [
-                    'yadcf_select', 'yadcf_multi_select', 'yadcf_autocomplete'
-            ]:
-                filtered = self._query_with_all_filters_except_one(
-                    query=query, exclude=i)
-                v = filtered.add_columns(col.sqla_expr).distinct().all()
-                self.yadcf_params.append(('yadcf_data_{:d}'.format(i),
-                                          [r[0] for r in v]))
+        column_params_map = self._map_columns_with_params(self.columns, self.params)
+        for i, col in column_params_map:
+            if col.yadcf_data:
+                if col.search_method in 'yadcf_range_number_slider':
+                    v = query.with_entities(
+                        func.min(col.sqla_expr), func.max(col.sqla_expr)).one()
+                    self.yadcf_params.append(('yadcf_data_{:d}'.format(i),
+                                              (math.floor(v[0]), math.ceil(v[1]))))
+                
+                if col.search_method in [
+                        'yadcf_select', 'yadcf_multi_select', 'yadcf_autocomplete'
+                ]:
+                    filtered = self._query_with_all_filters_except_one(
+                        query=query, exclude=i)
+                    v = filtered.with_entities(col.sqla_expr).distinct().all()
+                    #Added the below `if` statement so that data with only 
+                    #null value is not returned.
+                    if not(len(v)==1 and v[0][0]==None):
+                        self.yadcf_params.append(('yadcf_data_{:d}'.format(i),
+                                                  [r[0] for r in v]))
 
     def run(self):
         """Launch filtering, sorting and paging to output results."""
@@ -102,7 +136,7 @@ class DataTables:
         query = query.filter(
             *[e for e in self.filter_expressions if e is not None])
 
-        self.cardinality_filtered = query.add_columns(
+        self.cardinality_filtered = query.with_entities(
             self.columns[0].sqla_expr).count()
 
         # apply sorts
@@ -116,12 +150,12 @@ class DataTables:
         elif length == -1:
             pass
         else:
-            raise (ValueError(
+           raise (ValueError(
                 'Length should be a positive integer or -1 to disable'))
         query = query.offset(int(self.params.get('start')))
 
         # add columns to query
-        query = query.add_columns(*[c.sqla_expr for c in self.columns])
+        query = query.with_entities(*[c.sqla_expr for c in self.columns])
 
         # fetch the result of the queries
         column_names = [
@@ -138,13 +172,15 @@ class DataTables:
         Add filtering when per column searching is used.
         """
         # per columns filters:
-        for i in range(len(self.columns)):
+        column_params_map = self._map_columns_with_params(self.columns, self.params)
+        for i, col in column_params_map:
             filter_expr = None
             value = self.params.get('columns[{:d}][search][value]'.format(i),
-                                    '')
+                                    '').replace("\\","")
+
             if value:
-                search_func = SEARCH_METHODS[self.columns[i].search_method]
-                filter_expr = search_func(self.columns[i].sqla_expr, value)
+                search_func = SEARCH_METHODS[col.search_method]
+                filter_expr = search_func(col.sqla_expr, value)
             self.filter_expressions.append(filter_expr)
 
     def _set_global_filter_expression(self):
@@ -177,11 +213,12 @@ class DataTables:
 
         Add sorting(ORDER BY) on the columns needed to be applied on.
         """
+        column_params_map = dict(self._map_columns_with_params(self.columns, self.params))
         sort_expressions = []
         i = 0
         while self.params.get('order[{:d}][column]'.format(i), False):
             column_nr = int(self.params.get('order[{:d}][column]'.format(i)))
-            column = self.columns[column_nr]
+            column = column_params_map[column_nr]
             direction = self.params.get('order[{:d}][dir]'.format(i))
             sort_expr = column.sqla_expr
             if direction == 'asc':

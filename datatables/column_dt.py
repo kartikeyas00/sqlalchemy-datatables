@@ -13,6 +13,7 @@ ColumnTuple = namedtuple('ColumnDT', [
     'search_method',
     'nulls_order',
     'global_search',
+    'yadcf_data'
 ])
 
 
@@ -45,7 +46,10 @@ class ColumnDT(ColumnTuple):
             - 'nullsfirst'
             - 'nullslast'.
     :param global_search: search this column for the global search box
-
+    :param yadcf_data : define if the data needs to be returned for yadcf plugin.
+        Possible values:
+            - False 
+            - True (default)
     :type sqla_expr: SQLAlchemy query expression
     :type mData: str
     :type search_method: str
@@ -64,6 +68,7 @@ class ColumnDT(ColumnTuple):
             search_method='string_contains',
             nulls_order=None,
             global_search=True,
+            yadcf_data=True,
     ):
         """Set default values due to namedtuple immutability."""
         if nulls_order and nulls_order not in NULLS_ORDER:
@@ -84,4 +89,5 @@ class ColumnDT(ColumnTuple):
             search_method,
             nulls_order,
             global_search,
+            yadcf_data,
         )
