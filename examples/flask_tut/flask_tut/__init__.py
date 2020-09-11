@@ -56,7 +56,6 @@ def data():
 
     # GET parameters
     params = request.args.to_dict()
-
     # instantiating a DataTable for the query and table needed
     rowTable = DataTables(params, query, columns)
 
