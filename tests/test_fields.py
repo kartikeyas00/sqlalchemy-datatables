@@ -179,3 +179,27 @@ def test_column_not_searchable(session):
     assert len(res['data']) == 0
     assert res['recordsTotal'] == '51'
     assert res['recordsFiltered'] == '0'
+    
+@pytest.mark.parametrize(
+    ('yadcf_data_param', 'result'),
+    (
+     (True, True),
+     (False, False),
+     )
+)
+def test_column_yadcf_data(session, yadcf_data_param, result):
+    """Test if result's have yadcf data or not based on the given parameters."""
+    columns = [
+        ColumnDT(User.id, mData='ID'),
+        ColumnDT(User.name, mData='Username', search_method='yadcf_select', yadcf_data=yadcf_data_param)
+    ]
+
+    query = session.query().select_from(User)
+
+    params = create_dt_params(columns)
+    rowTable = DataTables(params, query, columns)
+    res = rowTable.output_result()
+
+    assert len(res['data']) == 10
+    assert res['recordsTotal'] == '50'
+    assert ('yadcf_data_1' in res) == result
